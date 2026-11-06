@@ -217,3 +217,13 @@ jobs:
             UniXNU/out/sheng/*/*/payload/payload.img
             UniXNU/out/sheng/*/*/kernel/kernel.macho
             UniXNU/out/sheng/*/*/package.manifest.json
+
+      - name: upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          retention-days: 3
+          path: |
+            UniXNU/out/**/logs/*.log
+            UniXNU/out/**/runtime/*.log
