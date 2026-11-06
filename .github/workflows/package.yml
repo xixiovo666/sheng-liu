@@ -48,7 +48,8 @@ jobs:
           submodules: recursive
       - uses: actions/checkout@v4
         with:
-          repository: UniXNU/uefi-sheng
+          repository: xixiovo666/uefi-sheng
+          ref: sheng
           path: uefi-sheng
           submodules: recursive
       - name: tools
