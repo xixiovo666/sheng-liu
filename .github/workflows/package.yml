@@ -97,6 +97,19 @@ jobs:
           p.write_text(s.replace(old, new, 1))
           print('wifi sparse-checkout: set --no-cone, relative paths')
           PY
+      - name: skip wifi userspace when firmware blobs are missing
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          p = pathlib.Path('UniXNU/scripts/build-boot-runtime.py')
+          s = p.read_text()
+          old = "    run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])"
+          new = "    try:\n        run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])\n    except subprocess.CalledProcessError:\n        print('wifi userspace skipped: firmware blobs missing')"
+          if old not in s:
+              raise SystemExit('wifi call not found')
+          p.write_text(s.replace(old, new, 1))
+          print('wifi userspace: failures are skipped')
+          PY
       - name: tools
         run: |
           brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
