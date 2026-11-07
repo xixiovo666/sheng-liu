@@ -202,6 +202,12 @@ jobs:
         run: |
           cd ../UniXNU
           ./unixnu build firmware -D ../device --uefi ../uefi-sheng
+
+      - name: userdata root image
+        working-directory: UniXNU
+        run: |
+          ./unixnu build userdata -D ../device --ipsw "https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw"
+          ls -lh out/sheng/*/*/userdata/ || true
       - uses: actions/cache/save@v4
         if: always() && inputs.os == '27' && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
         with:
@@ -229,6 +235,7 @@ jobs:
             UniXNU/out/sheng/*/*/boot/boot.img
             UniXNU/out/sheng/*/*/payload/payload.img
             UniXNU/out/sheng/*/*/kernel/kernel.macho
+            UniXNU/out/sheng/*/*/userdata/userdata-root.img
 
       - name: upload build logs
         if: always()
