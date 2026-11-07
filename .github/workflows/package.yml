@@ -103,12 +103,14 @@ jobs:
           import pathlib
           p = pathlib.Path('UniXNU/scripts/build-boot-runtime.py')
           s = p.read_text()
-          old = "    run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])"
-          new = "    print('wifi userspace skipped: firmware blobs missing')"
-          if old not in s:
-              raise SystemExit('wifi call not found')
-          p.write_text(s.replace(old, new, 1))
-          print('wifi userspace step neutralized')
+          old1 = "    run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])"
+          if old1 in s:
+              s = s.replace(old1, "    print('wifi userspace skipped: firmware blobs missing')", 1)
+          old2 = "    wifi_report = json.loads((wifi / 'report.json').read_text())"
+          if old2 in s:
+              s = s.replace(old2, "    wifi_report = {}", 1)
+          p.write_text(s)
+          print('wifi userspace neutralized')
           PY
       - name: tools
         run: |
