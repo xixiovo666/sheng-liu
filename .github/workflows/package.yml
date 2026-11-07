@@ -172,7 +172,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: UniXNU/out/sheng/*/*/tree/.cache/firmware/sheng
-          key: sheng-firmware-inputs-v1
+          key: sheng-firmware-inputs-v2
       - name: prefetch wifi sources
         run: |
           cd device/drivers/Ath12kWifi
