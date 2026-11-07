@@ -225,10 +225,7 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           path: |
-            UniXNU/out/sheng/*/*/boot/boot.img
-            UniXNU/out/sheng/*/*/payload/payload.img
-            UniXNU/out/sheng/*/*/kernel/kernel.macho
-            UniXNU/out/sheng/*/*/package.manifest.json
+            uefi-sheng/Build/shengPkg/*/FV/SILICIUM_UEFI.fd
 
       - name: upload build logs
         if: always()
