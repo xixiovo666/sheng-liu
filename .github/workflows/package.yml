@@ -1,40 +1,12 @@
-name: package
-
-# scripts/package.sh of this repository on a macOS runner, with the UniXNU and uefi-sheng
-# checkouts beside it, the layout board.toml names. The platform seed comes from the
-# repository secret UNIXNU_UNIQUE_CHIP_ID and is baked into the images, so the run's
-# artifacts belong to one device alone: download them, then delete the run.
-
+name: compressed-payload-firmware
 on:
   workflow_dispatch:
-    inputs:
-      os:
-        description: "OS profile of the images"
-        type: choice
-        options: ["27", "26", "17"]
-        default: "27"
-      init_data:
-        description: "Create a NEW installation seed if no saved seed exists (iPadOS 27 only)"
-        type: boolean
-        default: false
-      data_seed_url:
-        description: "Optional original data.dbr URL for an existing installation; otherwise use the saved cache"
-        type: string
-      data_seed_sha256:
-        description: "Required SHA-256 when data_seed_url is supplied"
-        type: string
-
 permissions:
   contents: read
-
-concurrency:
-  group: package-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  package:
+  firmware:
     runs-on: macos-26
-    timeout-minutes: 360
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,206 +15,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: 82b847c4ac3f68a57024b3082ffa3a03442defd9 # Wi-Fi runtime and Data firmware integration
+          ref: 82b847c4ac3f68a57024b3082ffa3a03442defd9
           path: UniXNU
           submodules: recursive
       - uses: actions/checkout@v4
         with:
-          repository: xixiovo666/uefi-sheng
-          ref: sheng
+          repository: UniXNU/uefi-sheng
+          ref: 66421cb7bb5694843aec8de1ca3d1de4c20cca38
           path: uefi-sheng
           submodules: false
-      - name: relax mesa patch application
+      - name: install tools
+        run: brew install dtc llvm lld cmake mtools ninja
+      - name: apply compressed payload driver and menu-safe firmware settings
         run: |
-          python3 - <<'PY'
-          import pathlib
-
-          p = pathlib.Path('UniXNU/scripts/build-boot-runtime.py')
-          s = p.read_text()
-
-          old = "run('git', '-C', mesa, 'apply', ROOT / patch)"
-          new = chr(10).join([
-              "try:",
-              "                run('git', '-C', mesa, 'apply', ROOT / patch)",
-              "            except subprocess.CalledProcessError:",
-              "                try:",
-              "                    run('patch', '-d', mesa, '-p1', '-F3', '-l', '-i', ROOT / patch)",
-              "                except subprocess.CalledProcessError:",
-              "                    print('skipped mesa patch: ' + str(patch))",
-          ])
-          if old not in s:
-              raise SystemExit('apply line not found')
-          s = s.replace(old, new, 1)
-
-          old2 = "    validate_recorded_patches(ROOT, mesa, pins)"
-          new2 = "    # validation skipped: Mesa patches are applied leniently"
-          if old2 not in s:
-              raise SystemExit('validation call not found')
-          s = s.replace(old2, new2, 1)
-
-          p.write_text(s)
-          print('mesa: git apply, falling back to patch -p1 -F3 -l')
-          PY
-      - name: relax wifi source fetch
-        run: |
-          python3 - <<'PY'
-          import pathlib
-
-          p = pathlib.Path('device/drivers/Ath12kWifi/tools/fetch-sources.py')
-          s = p.read_text()
-          old = '"sparse-checkout", "add", *source["paths"]'
-          new = '"sparse-checkout", "set", "--no-cone", *[x.lstrip(chr(47)) for x in source["paths"]]'
-          if old not in s:
-              raise SystemExit('anchor missing in fetch-sources.py')
-          p.write_text(s.replace(old, new, 1))
-          print('wifi sparse-checkout: set --no-cone, relative paths')
-          PY
-      - name: skip wifi userspace when firmware blobs are missing
-        run: |
-          python3 - <<'PY'
-          import pathlib
-          p = pathlib.Path('UniXNU/scripts/build-boot-runtime.py')
-          s = p.read_text()
-          old1 = "    run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])"
-          if old1 in s:
-              s = s.replace(old1, "    print('wifi userspace skipped: firmware blobs missing')", 1)
-          old2 = "    wifi_report = json.loads((wifi / 'report.json').read_text())"
-          if old2 in s:
-              s = s.replace(old2, "    wifi_report = {}", 1)
-          p.write_text(s)
-          print('wifi userspace neutralized')
-          PY
-      - name: tools
-        run: |
-          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
-          {
-            echo "$HOME/.cargo/bin"
-            echo "/opt/homebrew/opt/llvm/bin"
-            echo "/opt/homebrew/opt/lld/bin"
-            echo "/opt/homebrew/opt/bison/bin"
-          } >> "$GITHUB_PATH"
-          rustup toolchain install 1.98.0 --profile minimal --component rust-src
-          # Fail fast, naming the tool, before forty minutes of build.
-          ok=1
-          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool \
-                   mformat mcopy ipsw; do
-            command -v "$t" >/dev/null || { echo "missing tool: $t"; ok=0; }
-          done
-          for t in lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
-            [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
-          done
-          [ "$ok" = 1 ]
-      - name: platform seed
-        env:
-          seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
-        run: |
-          echo "seed length: ${#seed}"
-          if ! [[ "$seed" =~ ^[0-9a-fA-F]{8}$ ]]; then
-            echo 'Set the repository secret UNIXNU_UNIQUE_CHIP_ID: the platform seed of the device, 8 hex digits.' >&2
-            exit 1
-          fi
-      - name: seed cache identity
-        id: seed-key
-        env:
-          SEED: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
-        run: |
-          python3 - <<'PY'
-          import hashlib, os
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
-              out.write('key=data-seed-v1-' + hashlib.sha256(os.environ['SEED'].encode()).hexdigest()[:16] + '\n')
-          PY
-      - uses: actions/cache/restore@v4
-        id: data-cache
-        if: inputs.os == '27'
-        with:
-          path: |
-            UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr
-            UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/inputs.json
-          key: ${{ steps.seed-key.outputs.key }}-${{ inputs.os }}
-      - name: prepare preserved Data seed
-        if: inputs.os == '27'
-        env:
-          INIT_DATA: true
-        run: |
-          python3 - <<'PY'
-          import hashlib, json, os, pathlib, urllib.request
-          inputs = json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())['inputs']
-          path = pathlib.Path('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr')
-          url, digest = inputs.get('data_seed_url', ''), inputs.get('data_seed_sha256', '').lower()
-          if url:
-              print('::add-mask::' + url)
-              if not url.startswith('https://') or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
-                  raise SystemExit('A seed URL requires HTTPS and its SHA-256')
-              with urllib.request.urlopen(url, timeout=120) as source:
-                  data = source.read(64 * 1024 * 1024 + 1)
-              if len(data) > 64 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
-                  raise SystemExit('Seed size or SHA-256 mismatch')
-              if path.exists() and path.read_bytes() != data:
-                  raise SystemExit('Saved seed differs; preserve and inspect it instead of replacing this installation')
-              path.parent.mkdir(parents=True, exist_ok=True)
-              path.write_bytes(data)
-          if not path.is_file() and os.environ['INIT_DATA'] != 'true':
-              raise SystemExit('No saved seed. Supply the ORIGINAL seed for an existing installation, or select init_data for a FIRST installation')
-          PY
+          cp device/diagnostics/compressed-initrd/UniXNURamDiskDxe.c UniXNU/package/UniXNUPkg/Driver/UniXNURamDiskDxe/
+          cp device/diagnostics/compressed-initrd/UniXNURamDiskDxe.inf UniXNU/package/UniXNUPkg/Driver/UniXNURamDiskDxe/
+          python3 device/diagnostics/compressed-initrd/configure.py
       - uses: actions/cache@v4
         with:
           path: UniXNU/out/sheng/*/*/tree/.cache/firmware/sheng
           key: sheng-firmware-inputs-v2
-      - name: prefetch wifi sources
-        run: |
-          cd device/drivers/Ath12kWifi
-          bash -x tools/fetch-sources.sh
-      - name: package
-        working-directory: device
-        env:
-          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
-          GITHUB_TOKEN: ${{ github.token }}
-          INIT_DATA: true
-          OS_PROFILE: ${{ inputs.os }}
-        run: |
-          cd ../UniXNU
-          ./unixnu build firmware -D ../device --uefi ../uefi-sheng
-
-      - name: userdata root image
+      - name: build firmware only
         working-directory: UniXNU
-        run: |
-          ./unixnu build userdata -D ../device --ipsw "https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw"
-          ls -lh out/sheng/*/*/userdata/ || true
-      - uses: actions/cache/save@v4
-        if: always() && inputs.os == '27' && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
+        run: ./unixnu build firmware -D ../device --uefi ../uefi-sheng
+      - uses: actions/upload-artifact@v4
         with:
-          path: |
-            UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr
-            UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/inputs.json
-          key: ${{ steps.seed-key.outputs.key }}-${{ inputs.os }}
-      - name: installation seed backup
-        if: always() && inputs.os == '27' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: installation-seed-${{ inputs.os }}
-          retention-days: 1
-          path: |
-            UniXNU/out/sheng/*/*/runtime/data.dbr
-            UniXNU/out/sheng/*/*/runtime/inputs.json
-      - name: images
-        uses: actions/upload-artifact@v4
-        with:
-          name: images-${{ inputs.os }}
-          retention-days: 1
+          name: compressed-payload-firmware
+          path: uefi-sheng/Build/shengPkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd
           if-no-files-found: error
-          path: |
-            uefi-sheng/Build/shengPkg/*/FV/SILICIUM_UEFI.fd
-            UniXNU/out/sheng/*/*/boot/boot.img
-            UniXNU/out/sheng/*/*/payload/payload.img
-            UniXNU/out/sheng/*/*/kernel/kernel.macho
-            UniXNU/out/sheng/*/*/userdata/userdata-root.img
-
-      - name: upload build logs
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: build-logs
-          retention-days: 3
-          path: |
-            UniXNU/out/**/logs/*.log
-            UniXNU/out/**/runtime/*.log
+          name: compressed-firmware-logs
+          path: UniXNU/out/**/logs/*.log

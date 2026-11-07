@@ -1,0 +1,35 @@
+[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = UniXNURamDiskDxe
+  FILE_GUID                      = 75CA63AD-FBAE-4A06-92A0-F937C671251D
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UniXNURamDiskDxeEntry
+
+[Sources]
+  UniXNURamDiskDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  CryptoPkg/CryptoPkg.dec
+
+# DSC: add NULL|MdeModulePkg/Library/LzmaCustomDecompressLib/LzmaCustomDecompressLib.inf
+# in this component's <LibraryClasses>, with ExtractGuidedSectionLib resolved.
+# BaseCryptLib must provide SHA256 (a NULL crypto implementation is insufficient).
+[LibraryClasses]
+  BaseCryptLib
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  FdtLib
+  HobLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+
+[Protocols]
+  gEfiBlockIoProtocolGuid                       ## PRODUCES
+  gEfiDevicePathProtocolGuid                    ## PRODUCES
+
+[Depex]
+  TRUE
