@@ -201,7 +201,7 @@ jobs:
           OS_PROFILE: ${{ inputs.os }}
         run: |
           cd ../UniXNU
-          ./unixnu build firmware -D ../device --uefi ../uefi-sheng --target RELEASE
+          ./unixnu build firmware -D ../device --uefi ../uefi-sheng
       - uses: actions/cache/save@v4
         if: always() && inputs.os == '27' && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
         with:
