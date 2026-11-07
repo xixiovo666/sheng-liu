@@ -200,8 +200,11 @@ jobs:
           INIT_DATA: true
           OS_PROFILE: ${{ inputs.os }}
         run: |
-          cd ../UniXNU
-          ./unixnu build firmware -D ../device --uefi ../uefi-sheng
+          args=(--os "$OS_PROFILE" --uefi ../uefi-sheng)
+          if [ "$INIT_DATA" = true ]; then
+            args+=(--init-data)
+          fi
+          scripts/package.sh "${args[@]}"
       - uses: actions/cache/save@v4
         if: always() && inputs.os == '27' && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
         with:
@@ -226,6 +229,9 @@ jobs:
           if-no-files-found: error
           path: |
             uefi-sheng/Build/shengPkg/*/FV/SILICIUM_UEFI.fd
+            UniXNU/out/sheng/*/*/boot/boot.img
+            UniXNU/out/sheng/*/*/payload/payload.img
+            UniXNU/out/sheng/*/*/kernel/kernel.macho
 
       - name: upload build logs
         if: always()
