@@ -51,7 +51,7 @@ jobs:
           repository: xixiovo666/uefi-sheng
           ref: sheng
           path: uefi-sheng
-          submodules: recursive
+          submodules: false
       - name: relax mesa patch application
         run: |
           python3 - <<'PY'
