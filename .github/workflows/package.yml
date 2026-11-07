@@ -200,11 +200,8 @@ jobs:
           INIT_DATA: true
           OS_PROFILE: ${{ inputs.os }}
         run: |
-          args=(--os "$OS_PROFILE" --uefi ../uefi-sheng)
-          if [ "$OS_PROFILE" = 27 ] && [ "$INIT_DATA" = true ]; then
-            args+=(--init-data)
-          fi
-          scripts/package.sh "${args[@]}"
+          cd ../UniXNU
+          ./unixnu build firmware -D ../device --uefi ../uefi-sheng
       - uses: actions/cache/save@v4
         if: always() && inputs.os == '27' && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr') != ''
         with:
